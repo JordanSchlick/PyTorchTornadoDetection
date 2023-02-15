@@ -1,0 +1,6 @@
+
+Comes from   https://www.ncdc.noaa.gov/stormevents/
+
+Example    https://www.ncdc.noaa.gov/stormevents/eventdetails.jsp?id=975879
+
+Data download location   https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/
