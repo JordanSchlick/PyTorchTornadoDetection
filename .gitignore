@@ -1,2 +1,5 @@
 __pycache__
 cache_data*
+/data/Radar/l2data
+/data/Radar/temp
+/data/Radar/s3cache
