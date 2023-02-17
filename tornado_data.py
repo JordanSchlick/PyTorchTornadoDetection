@@ -75,6 +75,9 @@ def load_data():
 		# technically some radar data may not have dual polarization until July of 2013 but those are the minority
 		df = df.loc[df["BEGIN_TIME_UNIX"] > 1367384400]
 		
+		# there was one error in the dataset that says a tornado was on the ground for over 24 hours
+		df = df.loc[df["DURATION"] < 60 * 60 * 6]
+		
 		#tornado_dataframe["date_interval"] = pandas.Interval(date_unix, date_unix + duration)
 		if tornado_dataframe is None:
 			tornado_dataframe = df
@@ -138,7 +141,8 @@ def interpolate_3d(x1, x2, amount):
 
 def generate_mask(radar_data):
 	stats = radar_data.get_stats()
-	tornados = get_tornados(stats["begin_time"] - 60, stats["end_time"] + 60)
+	# expand time range slightly to get tornados that ate about to happen
+	tornados = get_tornados(stats["begin_time"] - 60, stats["end_time"] + 180)
 	scan_time = stats["begin_time"] + (stats["end_time"] - stats["begin_time"]) / 4
 	if tornados.shape[0] == 0:
 		return np.zeros((radar_data.theta_buffer_count, radar_data.radius_buffer_count))
@@ -148,7 +152,8 @@ def generate_mask(radar_data):
 	X, Y = np.ogrid[:theta_buffer_count, :radius_buffer_count]
 	for index, tornado in tornados.iterrows():
 		# time in tornados lifespan 0.0 to 1.0
-		tornado_time = min(max((scan_time - tornado.BEGIN_TIME_UNIX) / max((tornado.END_TIME_UNIX - tornado.BEGIN_TIME_UNIX), 30), 0), 1)
+		# can be outside that range if before or after tornado
+		tornado_time = (scan_time - tornado.BEGIN_TIME_UNIX) / max((tornado.END_TIME_UNIX - tornado.BEGIN_TIME_UNIX), 30)
 		print(tornado_time, tornado.TOR_F_SCALE)
 		
 		# get current position in radar space
