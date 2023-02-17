@@ -119,7 +119,11 @@ def get_tornados(start_time, end_time):
 	
 	return df
 
-
+def get_all_tornados():
+	global tornado_dataframe
+	if tornado_dataframe is None:
+		load_data()
+	return tornado_dataframe
 
 def benchmark():
 	get_tornados(1370042092.1780014, 1370042343.552)
