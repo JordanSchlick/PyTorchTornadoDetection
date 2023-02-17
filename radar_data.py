@@ -6,7 +6,6 @@ import boto3
 from botocore.handlers import disable_signing
 import math
 import datetime as dt
-import time
 
 tornado_df = None
 stations_df = None
@@ -18,19 +17,18 @@ def load_data():
 	global tornado_df
 	global stations_df
 	global radar_bucket
-	global radar_object
+
 	stations_df = pd.read_csv("./data/Radar/NEXRAD_Stations.csv")
 	stations_df = stations_df.loc[stations_df.STATION_ID.str.contains("NEXRAD:T")==False]
 	tornado_df = td.get_all_tornados()
 	print("All hail the rat god!")
 	
+	# create the aws s3 link to 'noaa-nexrad-level2' bucket
 	s3object = boto3.resource("s3")
 	s3object.meta.client.meta.events.register('choose-signer.s3.*', disable_signing)
 	radar_bucket = s3object.Bucket(S3_BUCKET_NAME)
-	# print('Listing Amazon S3 Bucket objects/files:')
-	# for obj in radar_bucket.objects.filter(Prefix='2018'):
-	#     print(f'-- {obj.key}')
 
+# finds the distance between two longitudinal and latitudinal coordinates
 def find_distance(lat1, lon1, lat2, lon2):
 	lat1 = math.radians(lat1)
 	lon1 = math.radians(lon1)
@@ -41,9 +39,10 @@ def find_distance(lat1, lon1, lat2, lon2):
 	a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
 	c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 	return surface_radius * c
-	
-def download_file_check(obj, date, station_name, begin_unix_time, end_unix_time):
-	date_sections = obj.replace((date + '/' + station_name + '/' + station_name), '').split('_')
+
+# checks the given file name to see if it is within the given time frame
+def download_file_check(file_name, date, station_name, begin_unix_time, end_unix_time):
+	date_sections = file_name.replace((date + '/' + station_name + '/' + station_name), '').split('_')
 	d = date_sections[0][0:4] + "-" + date_sections[0][4:6] + "-" + date_sections[0][6:]
 	t = date_sections[1][0:2] + ":" + date_sections[1][2:4] + ":" + date_sections[1][4:]
 	unix_time = dateutil.parser.parse((d + ' ' + t + ' +0')).timestamp()
@@ -53,23 +52,25 @@ def download_file_check(obj, date, station_name, begin_unix_time, end_unix_time)
 	else:
 		return False
 
+# acquires and caches the file list from the nexrad aws s3 bucket
 def find_l2_files(prefix):
 	path = "./data/Radar/s3cache/" + prefix.replace('/', '-')
-	objs = []
+	file_names = []
 	if os.path.isfile(path):
 		file = open(path, "r")
-		objs = file.read().split('\n')
+		file_names = file.read().split('\n')
 		file.close()
-		if objs[-1] == '':
-			objs = objs[:-1]
+		if file_names[-1] == '':
+			file_names = file_names[:-1]
 	else:
 		bucket_data = radar_bucket.objects.filter(Prefix=prefix)
 		file = open(path, "w")
-		objs = list(map(lambda x: x.key, bucket_data))
-		file.write("\n".join(objs))
+		file_names = list(map(lambda x: x.key, bucket_data))
+		file.write("\n".join(file_names))
 		file.close()
-	return objs
+	return file_names
 
+# downloads and moves all the files in the list
 def download_l2_files(files_to_download):
 	global radar_bucket
 	for obj in files_to_download:
@@ -95,7 +96,7 @@ def download_nearest_operational_radar_data(tornado, stations_to_remove = []):
 	avg_lon = (tornado["BEGIN_LON"] + tornado["END_LON"])/2
 
 	temp_stations_df = stations_df
-	# completion of automatic radar data acquisition
+
 	# remove stations that were down during the time (based on previous runs of the function)
 	if stations_to_remove != []:
 		for station in stations_to_remove:
@@ -128,13 +129,13 @@ def download_nearest_operational_radar_data(tornado, stations_to_remove = []):
 
 	files_to_download = []
 	# print("Begin Time: " + str(begin_date_time))
-	for obj in find_l2_files(prefix):
-		if download_file_check(obj, begin_date, station_name, dateutil.parser.parse(begin_date_time.strftime("%Y-%m-%d %H:%M:%S") + ' +0').timestamp(), dateutil.parser.parse(end_date_time.strftime("%Y-%m-%d %H:%M:%S") + ' +0').timestamp()):
-			files_to_download.append(obj)
+	for file_name in find_l2_files(prefix):
+		if download_file_check(file_name, begin_date, station_name, dateutil.parser.parse(begin_date_time.strftime("%Y-%m-%d %H:%M:%S") + ' +0').timestamp(), dateutil.parser.parse(end_date_time.strftime("%Y-%m-%d %H:%M:%S") + ' +0').timestamp()):
+			files_to_download.append(file_name)
 	if begin_date != end_date:
-		for obj in find_l2_files(alt_prefix):
-			if download_file_check(obj, end_date, station_name, dateutil.parser.parse(begin_date_time.strftime("%Y-%m-%d %H:%M:%S") + ' +0').timestamp(), dateutil.parser.parse(end_date_time.strftime("%Y-%m-%d %H:%M:%S") + ' +0').timestamp()):
-				files_to_download.append(obj)
+		for file_name in find_l2_files(alt_prefix):
+			if download_file_check(file_name, end_date, station_name, dateutil.parser.parse(begin_date_time.strftime("%Y-%m-%d %H:%M:%S") + ' +0').timestamp(), dateutil.parser.parse(end_date_time.strftime("%Y-%m-%d %H:%M:%S") + ' +0').timestamp()):
+				files_to_download.append(file_name)
 	# print("End Time: " + str(end_date_time))
 
 	print("Files to Download: ")
