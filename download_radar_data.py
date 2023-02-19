@@ -21,6 +21,7 @@ def load_data():
 	stations_df = pd.read_csv("./data/Radar/NEXRAD_Stations.csv")
 	stations_df = stations_df.loc[stations_df.STATION_ID.str.contains("NEXRAD:T")==False]
 	tornado_df = td.get_all_tornados()
+	#tornado_df = tornado_df.loc[tornado_df.BEGIN_TIME_UNIX > 1577858400]
 	print("All hail the rat god!")
 	
 	# create the aws s3 link to 'noaa-nexrad-level2' bucket
@@ -63,6 +64,7 @@ def find_l2_files(prefix):
 		if file_names[-1] == '':
 			file_names = file_names[:-1]
 	else:
+		print("Getting list for prefix " + prefix)
 		bucket_data = radar_bucket.objects.filter(Prefix=prefix)
 		file = open(path, "w")
 		file_names = list(map(lambda x: x.key, bucket_data))
@@ -79,6 +81,8 @@ def download_l2_files(files_to_download):
 			file_path = "./data/Radar/temp/" + file_name
 			new_file_path = "./data/Radar/l2data/" + file_name
 			if not os.path.isfile(new_file_path):
+				# with open(file_path, 'w') as fp:
+				# 	pass
 				radar_bucket.download_file(obj, file_path)
 				print("Download of " + file_name + " completed")
 				os.rename(file_path, new_file_path)
@@ -88,7 +92,7 @@ def download_l2_files(files_to_download):
 		else:
 			print("We don't know what MDM files do, so we will ignore them")
 
-def download_nearest_operational_radar_data(tornado, stations_to_remove = []):
+def download_nearest_operational_radar_data(tornado, stations_to_remove = None):
 	global stations_df
 	global radar_bucket
 
@@ -96,7 +100,10 @@ def download_nearest_operational_radar_data(tornado, stations_to_remove = []):
 	avg_lon = (tornado["BEGIN_LON"] + tornado["END_LON"])/2
 
 	temp_stations_df = stations_df
-
+	
+	if stations_to_remove is None:
+		stations_to_remove = []
+	
 	# remove stations that were down during the time (based on previous runs of the function)
 	if stations_to_remove != []:
 		for station in stations_to_remove:
@@ -109,12 +116,18 @@ def download_nearest_operational_radar_data(tornado, stations_to_remove = []):
 
 	temp_stations_df['DISTANCE'] = distances
 	temp_stations_df = temp_stations_df.loc[temp_stations_df['DISTANCE'] < 400000]
+	
+	if temp_stations_df.empty:
+		# no radars available
+		return
+		
+	
 	ans = temp_stations_df.iloc[(temp_stations_df['DISTANCE']).abs().argsort()[:1]]
 	print("Station Found: ")
 	print(ans)
 
 	begin_date_time = dt.datetime.utcfromtimestamp(tornado['BEGIN_TIME_UNIX'])
-	begin_date_time -= dt.timedelta(minutes=6)
+	begin_date_time -= dt.timedelta(minutes=6) # move start time back to ensure the volume where the tornado is forming is downloaded
 	begin_date = str(begin_date_time.date()).replace('-', '/')
 
 	end_date_time = dt.datetime.utcfromtimestamp(tornado['END_TIME_UNIX'])
@@ -164,7 +177,7 @@ def get_radar_data():
 		pass
 	for tornado in tornado_df.iterrows():
 		download_nearest_operational_radar_data(tornado[1])
-		break
+		#break
 		
 
 get_radar_data()
