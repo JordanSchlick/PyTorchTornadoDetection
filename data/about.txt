@@ -1,0 +1,3 @@
+Radar contains level 2 radar data. The radar data is not included in the git repository and needs to be downloaded with download_radar_data.py
+SPC contains csv data about all tornados but lacks details.
+StormEvents contains compressed csv data about storm events including tornados with many details.

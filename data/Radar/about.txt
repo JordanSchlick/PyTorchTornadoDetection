@@ -5,3 +5,9 @@ Completed: Radars can also be down in which case data from the next closest rada
 Completed: There are terminal weather radars (https://en.wikipedia.org/wiki/Terminal_Doppler_Weather_Radar) which should be excluded. Their names begin with a T.
 Completed: wsr-88d radars have a range of 460 km. Any tornado not within 400km of any working radar should be excluded.
 Completed: The files ending in _MDM should be excluded. I still don't know what they are, and it doesn't seem like anyone else knows either.
+
+NEXRAD_Stations.csv contains a list of radar stations and their locations
+download_radar_data.py creates the following directories
+The l2data directory contains the output data for tornadic level 2 data
+The s3cache directory contains cached data for s2 bucket queries and is only usefull for downloading data
+The temp directory is for data while downloading and should be empty after finishing
