@@ -11,3 +11,26 @@ download_radar_data.py creates the following directories
 The l2data directory contains the output data for tornadic level 2 data
 The s3cache directory contains cached data for s2 bucket queries and is only usefull for downloading data
 The temp directory is for data while downloading and should be empty after finishing
+
+The NEXRAD Level II archive data is hosted in the noaa-nexrad-level2 Amazon S3 bucket in the us-east-1 AWS region. 
+The address for the public bucket is: https://noaa-nexrad-level2.s3.amazonaws.com.
+
+Naming Format of level 2 radar data:
+
+	/<Year>/<Month>/<Day>/<NEXRAD Station/>/<filename>
+	file path:
+		<Year> is the year the data was collected
+		<Month> is the month of the year the data was collected
+		<Day> is the day of the month the data was collected
+		<NEXRAD Station> is the NEXRAD ground station (map of ground stations)
+		<filename> is the name of the file containing the data. These are compressed files (compressed with gzip). The file name has more precise timestamp information.
+		All files in the archive use the same compressed format (.gz).
+		
+	GGGGYYYYMMDD_TTTTTT
+	filename:
+		GGGG = Ground station ID (map of ground stations)
+		YYYY = year
+		MM = month
+		DD = day
+		TTTTTT = time when data started to be collected (GMT)
+		Note that the 2015 files have an additional field on the file name. It adds “_V06” to the end of the file name. An example is KABX20150303_001050_V06.gz.
