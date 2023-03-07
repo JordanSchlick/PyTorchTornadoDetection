@@ -206,6 +206,20 @@ class TornadoDataset(ThreadedDataset):
 		else:
 			return buffer[theta_slice,radius_start:radius_end]
 	
+	def _validate_radar_data(self, radar_data):
+		"""A quick test to see if radar data is missing significant amounts of data"""
+		sweep_info = radar_data.get_sweep_info()
+		sweep_count = 0
+		for sweep in sweep_info:
+			if sweep["id"] != -1:
+				sweep_count += 1
+		if sweep_count < 5:
+			return False
+		if sweep_info[0]["actual_ray_count"] < 700:
+			return False
+		return True
+		
+	
 	def _generator(self):
 		"""Loads a file
 
@@ -253,6 +267,13 @@ class TornadoDataset(ThreadedDataset):
 			spectrum_width_data = spectrum_width_product.get_radar_data()
 			corelation_coefficient_data = corelation_coefficient_product.get_radar_data()
 			differential_reflectivity_data = differential_reflectivity_product.get_radar_data()
+			
+			if not self._validate_radar_data(reflectivity_data):
+				print("missing data in reflectivity volume", file)
+				continue
+			if not self._validate_radar_data(velocity_data):
+				print("missing data in velocity volume", file)
+				continue
 			
 			theta_start = 0
 			theta_end = 512
