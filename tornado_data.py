@@ -17,6 +17,9 @@ tornado_dataframe = None
 
 
 def load_data():
+	"""
+	Loads and cleans data about tornados
+	"""
 	global tornado_dataframe
 	try:
 		cache = pandas.read_csv("./cache_data_tornados.csv")
@@ -112,6 +115,15 @@ def overlaps(a1, a2, b1, b2):
 # print(overlaps(0.5,0.6,0,1))
 
 def get_tornados(start_time, end_time):
+	"""Get tornados that occur in the given time frame
+
+	Args:
+		start_time (number): unix epoch of the start of the time frame
+		end_time (number):  unix epoch of the end of the time frame
+
+	Returns:
+		pandas.dataframe: A dataframe containing all tornados from the time frame
+	"""
 	global tornado_dataframe
 	if tornado_dataframe is None:
 		load_data()
@@ -123,6 +135,11 @@ def get_tornados(start_time, end_time):
 	return df
 
 def get_all_tornados():
+	"""Gets all tornados in the data
+
+	Returns:
+		pandas.dataframe: A dataframe containing all tornados from the data
+	"""
 	global tornado_dataframe
 	if tornado_dataframe is None:
 		load_data()
@@ -140,6 +157,15 @@ def interpolate_3d(x1, x2, amount):
 	return (x1[0] * (1 - amount) + x2[0] * amount, x1[1] * (1 - amount) + x2[1] * amount, x1[2] * (1 - amount) + x2[2] * amount)
 
 def generate_mask(radar_data):
+	"""Generates a mask of where tornados are in a radar volume
+
+	Args:
+		radar_data (RadarData): radar data object to generate the mask for
+
+	Returns:
+		numpy.array: a 2d array with the size of a sweep excluding the padding rays
+		list[dict]: a list of dictionaries containing info about tornados
+	"""
 	stats = radar_data.get_stats()
 	# expand time range slightly to get tornados that ate about to happen
 	tornados = get_tornados(stats["begin_time"] - 60, stats["end_time"] + 180)
@@ -150,11 +176,12 @@ def generate_mask(radar_data):
 	theta_buffer_count = radar_data.theta_buffer_count
 	radius_buffer_count = radar_data.radius_buffer_count
 	X, Y = np.ogrid[:theta_buffer_count, :radius_buffer_count]
+	info = []
 	for index, tornado in tornados.iterrows():
 		# time in tornados lifespan 0.0 to 1.0
 		# can be outside that range if before or after tornado
 		tornado_time = (scan_time - tornado.BEGIN_TIME_UNIX) / max((tornado.END_TIME_UNIX - tornado.BEGIN_TIME_UNIX), 30)
-		print(tornado_time, tornado.TOR_F_SCALE)
+		#print(tornado_time, tornado.TOR_F_SCALE)
 		
 		# get current position in radar space
 		begin_pos = radar_data.get_radar_space_for_location(tornado.BEGIN_LAT, tornado.BEGIN_LON, 0)
@@ -165,10 +192,11 @@ def generate_mask(radar_data):
 		pixel_info = radar_data.get_pixel_for_radar_space(pos[0], pos[1], pos[2])
 		pixel_location_theta = pixel_info["theta"]
 		pixel_location_radius = pixel_info["radius"]
-		# set radius of 10km based on pixel dimensions
-		radius = 10000 / pixel_info["pixel_radius_length"]
+		# set radius of 15km based on pixel dimensions
+		radius = 15000 / pixel_info["pixel_radius_length"]
 		oval_ratio = pixel_info["pixel_theta_width"] / pixel_info["pixel_radius_length"]
 		
+		# TODO: this does not handle wrapping correctly and cuts off the mask when it should wrap around theta
 		oval_ratio = oval_ratio**2
 		distance = oval_ratio * (X - pixel_location_theta)**2 + (Y - pixel_location_radius)**2
 		radius = (radius)**2
@@ -177,7 +205,14 @@ def generate_mask(radar_data):
 			mask = circular_mask
 		else:
 			mask = mask | circular_mask
-	return mask
+		
+		info.append({
+			"rating": tornado.TOR_F_SCALE,
+			"tornado_time": tornado_time,
+			"location_theta": pixel_location_theta,
+			"location_radius": pixel_location_radius,
+		})
+	return mask, info
 
 if __name__ == "__main__":
 	load_data()
