@@ -9,7 +9,8 @@ import multiprocessing
 import hashlib
 
 import numpy as np
-import tensorflow as tf
+# import tensorflow as tf
+import torch
 import utils
 import tornado_data
 
@@ -87,6 +88,8 @@ class ThreadedDataset:
 		"""
 		
 		#print("=="+self.debug_name)
+		if not self.alive:
+			return None
 		if self.thread_count > 0:
 			while True:
 				self.buffer_lock.acquire()
@@ -338,8 +341,15 @@ class TornadoDataset(ThreadedDataset):
 					sliced_buffers.append(self._slice_buffer(buffer, theta_start, theta_end, radius_start, radius_end, padded=True))
 				sliced_mask = self._slice_buffer(mask, theta_start, theta_end, radius_start, radius_end, padded=False)
 				
+				# get rid of -inf values and somewhat normalize
+				sliced_buffers[0] = np.maximum(sliced_buffers[0], 0) / 50 # reflectivity
+				sliced_buffers[1] = sliced_buffers[1] / 30 # velocity
+				sliced_buffers[2] = np.maximum(sliced_buffers[2], 0) / 30 # spectrum width
+				sliced_buffers[3] = np.maximum(sliced_buffers[3], 0) # corelation coefficient
+				sliced_buffers[4] = np.where(sliced_buffers[4] != -np.inf, sliced_buffers[4], 0) / 8 # differential_reflectivity
+				
 				outputs.append({
-					"data": np.stack(sliced_buffers, axis=-1),
+					"data": np.stack(sliced_buffers, axis=0),
 					"mask": sliced_mask,
 					"file": file,
 					"bounds": (theta_start, theta_end, radius_start, radius_end)
@@ -366,139 +376,159 @@ class TornadoDataset(ThreadedDataset):
 
 
 
-
-
-
-
-
-
-
-class TensorFlowDataset():
-	def __init__(self,from_dataset,thread_count=2,buffer_size=5,batch_size=1,log_queue_empty=False) -> None:
-		"""Gets the data ready to be consumed by a tensorflow training loop
-
-		Args:
-			training_dataset (TrainingDataset): Training dataset to use
-			thread_count (int, optional): Number of threads to use. Defaults to 2.
-			buffer_size (int, optional):  Number of items to be queued up. Defaults to 5.
-			batch_size (int, optional): Output batch size. Defaults to 1.
-		"""
-		self.from_dataset = from_dataset
-		self.batch_size = batch_size
-		self.log_queue_empty = log_queue_empty
-		example = self._read()
-		defined_names_list = []
-		defined_type_list = []
-		for key in example:
-			item = example[key]
-			defined_names_list.append(key)
-			shape = item.shape
-			shape = tf.TensorSpec(shape,item.dtype)
-			defined_type_list.append(item.dtype)
-			
-		self.queue = tf.queue.FIFOQueue(buffer_size,defined_type_list,names=defined_names_list)
-		if thread_count > 0:
-			for i in range(thread_count):
-				t = threading.Thread(target=self._read_thread)
-				t.daemon = True
-				t.start()
-		
-	def _read(self):
-		"""reads one item
-
-		Returns:
-			dict: Dictionary containing data
-		"""
-		out_dict = {}
-		in_dict = self.from_dataset.next()
-		for key in in_dict:
-			# filter out bad types
-			if not isinstance(in_dict[key], str):
-				out_dict[key] = in_dict[key]
-		return 
-		
-		
-	def _read_thread(self):
-		"""reads items into queue
-		"""
-		while threading.main_thread().is_alive():
-			out_items = []
-			for i in range(self.batch_size):
-				out_items.append(self._read())
-			if self.batch_size == 1:
-				self.queue.enqueue(out_items[0])
+class TorchDataset(torch.utils.data.IterableDataset):
+	def __init__(self, input_dataset, device=torch.device("cpu")):
+		self.input_dataset = input_dataset
+		self.device = device
+	
+	def __iter__(self):
+		return self
+	
+	def __next__(self):
+		in_item = self.input_dataset.next()
+		out_item = {}
+		for key in in_item:
+			value = in_item[key]
+			#if isinstance(in_item[key], str):
+			if isinstance(in_item[key], np.ndarray):
+				out_item[key] = torch.from_numpy(value).to(self.device)
 			else:
-				self.queue.enqueue(self._concat_dict(out_items))
-	
-	def _concat_dict(self,items,axis=0):
-		"""Runs tf.concat on a dictionary
+				out_item[key] = value
+		return out_item
 
-		Args:
-			items (list<dict>): List of dictionaries with same shape
-			axis (int, optional): Axis to concat on. Defaults to 0.
 
-		Returns:
-			dict: Concatinated dictionary
-		"""
-		out_dictionary = {}
-		for dictionary in items:
-			for key in dictionary:
-				if key not in out_dictionary:
-					out_dictionary[key] = []
-				out_dictionary[key].append(dictionary[key])
-		for key in out_dictionary:
-			out_dictionary[key] = tf.concat(out_dictionary[key],axis)
-		return out_dictionary
-	
-	def next(self):
-		"""Gets one item
 
-		Returns:
-			dict: Dictionary containing data
-		"""
-		# data = self.queue.dequeue_many(self.batch_size)
-		# print("get next")
+
+
+
+
+
+# class TensorFlowDataset():
+# 	def __init__(self,from_dataset,thread_count=2,buffer_size=5,batch_size=1,log_queue_empty=False) -> None:
+# 		"""Gets the data ready to be consumed by a tensorflow training loop
+
+# 		Args:
+# 			training_dataset (TrainingDataset): Training dataset to use
+# 			thread_count (int, optional): Number of threads to use. Defaults to 2.
+# 			buffer_size (int, optional):  Number of items to be queued up. Defaults to 5.
+# 			batch_size (int, optional): Output batch size. Defaults to 1.
+# 		"""
+# 		self.from_dataset = from_dataset
+# 		self.batch_size = batch_size
+# 		self.log_queue_empty = log_queue_empty
+# 		example = self._read()
+# 		defined_names_list = []
+# 		defined_type_list = []
+# 		for key in example:
+# 			item = example[key]
+# 			defined_names_list.append(key)
+# 			shape = item.shape
+# 			shape = tf.TensorSpec(shape,item.dtype)
+# 			defined_type_list.append(item.dtype)
+			
+# 		self.queue = tf.queue.FIFOQueue(buffer_size,defined_type_list,names=defined_names_list)
+# 		if thread_count > 0:
+# 			for i in range(thread_count):
+# 				t = threading.Thread(target=self._read_thread)
+# 				t.daemon = True
+# 				t.start()
 		
-		# if self.log_queue_empty and self.queue.size() < self.batch_size:
-		# 	print("Empty queue TrainingDatasetTensorFlow")
-		# if self.batch_size > 1:
-		# 	data = self._concat_dict([self.queue.dequeue() for i in range(self.batch_size)])
-		# else:
-		# 	data = self.queue.dequeue()
-		
-		if self.log_queue_empty and self.queue.size() < 1:
-			print("Empty queue TrainingDatasetTensorFlow")
-		data = self.queue.dequeue()
-		
-		#data = tf.concat([self.queue.dequeue(), self.queue.dequeue()],axis=0)
-		# print("got next")
-		# print(data)
-		return data
-		# return self.queue.dequeue()
-	
-	def _generator(self):
-		"""Generator for tensorflow dataset
+# 	def _read(self):
+# 		"""reads one item
 
-		Yields:
-			dict: Dictionary containing data
-		"""
-		while True:
-			yield self.next()
+# 		Returns:
+# 			dict: Dictionary containing data
+# 		"""
+# 		out_dict = {}
+# 		in_dict = self.from_dataset.next()
+# 		for key in in_dict:
+# 			# filter out bad types
+# 			if not isinstance(in_dict[key], str):
+# 				out_dict[key] = in_dict[key]
+# 		return 
+		
+		
+# 	def _read_thread(self):
+# 		"""reads items into queue
+# 		"""
+# 		while threading.main_thread().is_alive():
+# 			out_items = []
+# 			for i in range(self.batch_size):
+# 				out_items.append(self._read())
+# 			if self.batch_size == 1:
+# 				self.queue.enqueue(out_items[0])
+# 			else:
+# 				self.queue.enqueue(self._concat_dict(out_items))
 	
-	def tf_dataset(self):
-		"""Creates a tf.data.Dataset backed by this dataset to be used with tensorflow apis
+# 	def _concat_dict(self,items,axis=0):
+# 		"""Runs tf.concat on a dictionary
 
-		Returns:
-			tf.data.Dataset: Tensorflow dataset
-		"""
-		example = self.next()
-		defined_shape_dict = {}
-		for key in example:
-			item = example[key]
-			shape = tf.TensorSpec(item.shape,item.dtype)
-			defined_shape_dict[key] = shape
-		print(defined_shape_dict)
-		return tf.data.Dataset.from_generator(
-            self._generator,
-            output_signature = defined_shape_dict
-        )
+# 		Args:
+# 			items (list<dict>): List of dictionaries with same shape
+# 			axis (int, optional): Axis to concat on. Defaults to 0.
+
+# 		Returns:
+# 			dict: Concatinated dictionary
+# 		"""
+# 		out_dictionary = {}
+# 		for dictionary in items:
+# 			for key in dictionary:
+# 				if key not in out_dictionary:
+# 					out_dictionary[key] = []
+# 				out_dictionary[key].append(dictionary[key])
+# 		for key in out_dictionary:
+# 			out_dictionary[key] = tf.concat(out_dictionary[key],axis)
+# 		return out_dictionary
+	
+# 	def next(self):
+# 		"""Gets one item
+
+# 		Returns:
+# 			dict: Dictionary containing data
+# 		"""
+# 		# data = self.queue.dequeue_many(self.batch_size)
+# 		# print("get next")
+		
+# 		# if self.log_queue_empty and self.queue.size() < self.batch_size:
+# 		# 	print("Empty queue TrainingDatasetTensorFlow")
+# 		# if self.batch_size > 1:
+# 		# 	data = self._concat_dict([self.queue.dequeue() for i in range(self.batch_size)])
+# 		# else:
+# 		# 	data = self.queue.dequeue()
+		
+# 		if self.log_queue_empty and self.queue.size() < 1:
+# 			print("Empty queue TrainingDatasetTensorFlow")
+# 		data = self.queue.dequeue()
+		
+# 		#data = tf.concat([self.queue.dequeue(), self.queue.dequeue()],axis=0)
+# 		# print("got next")
+# 		# print(data)
+# 		return data
+# 		# return self.queue.dequeue()
+	
+# 	def _generator(self):
+# 		"""Generator for tensorflow dataset
+
+# 		Yields:
+# 			dict: Dictionary containing data
+# 		"""
+# 		while True:
+# 			yield self.next()
+	
+# 	def tf_dataset(self):
+# 		"""Creates a tf.data.Dataset backed by this dataset to be used with tensorflow apis
+
+# 		Returns:
+# 			tf.data.Dataset: Tensorflow dataset
+# 		"""
+# 		example = self.next()
+# 		defined_shape_dict = {}
+# 		for key in example:
+# 			item = example[key]
+# 			shape = tf.TensorSpec(item.shape,item.dtype)
+# 			defined_shape_dict[key] = shape
+# 		print(defined_shape_dict)
+# 		return tf.data.Dataset.from_generator(
+#             self._generator,
+#             output_signature = defined_shape_dict
+#         )
