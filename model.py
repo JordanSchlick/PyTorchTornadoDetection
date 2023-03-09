@@ -1,5 +1,6 @@
 import torch
 import torch.functional
+import torchvision
 
 class TornadoDetectionModel(torch.nn.Module):
 	def __init__(self):
@@ -21,3 +22,32 @@ class TornadoDetectionModel(torch.nn.Module):
 		x = torch.sigmoid(self.conv5(x))
 		x = torch.squeeze(x, axis=1)
 		return x
+
+class MaskLoss(torch.nn.Module):
+	"""
+	A loss function for finding tornados.
+	The space inside the mask should have a high value somewhere, while the outside should be zero.
+	The output loss is between 0 and 2.
+	Loss values less than 0.5 indicate the model is able to differentiate between the inside and outside.
+	"""
+	def __init__(self):
+		super().__init__()
+
+	def forward(self, output, mask):
+		# crop edges that have problems due to padding
+		output = torchvision.transforms.functional.crop(output, 8, 8, output.shape[1] - 16, output.shape[2] - 16)
+		output = output.reshape(output.shape[0], -1)
+		mask = torchvision.transforms.functional.crop(mask, 8, 8, mask.shape[1] - 16, mask.shape[2] - 16)
+		mask = mask.reshape(mask.shape[0], -1)
+		outside_mask = torch.abs(output * (1 - mask))
+		#print(output.shape, output.dtype, mask.shape, mask.dtype, outside_mask.shape, outside_mask.dtype)
+		outside_mask = torch.mean(outside_mask, dim=-1) * 0.5 + torch.max(outside_mask, dim=-1).values * 0.5
+		inside_mask = output * mask
+		# mean is included inside the mask to keep gradients alive
+		inside_mask = 1 - (torch.max(inside_mask, dim=-1).values * 0.9 + torch.mean(inside_mask, dim=-1) * 0.1)
+		loss = outside_mask + inside_mask * 1.5
+		#print(loss)
+		return torch.mean(loss), {
+			"outside_mask": outside_mask,
+			"inside_mask": inside_mask
+		}

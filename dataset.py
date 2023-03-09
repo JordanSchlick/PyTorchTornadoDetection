@@ -350,7 +350,7 @@ class TornadoDataset(ThreadedDataset):
 				
 				outputs.append({
 					"data": np.stack(sliced_buffers, axis=0),
-					"mask": sliced_mask,
+					"mask": sliced_mask.astype(np.float32),
 					"file": file,
 					"bounds": (theta_start, theta_end, radius_start, radius_end)
 				})

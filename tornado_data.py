@@ -171,7 +171,7 @@ def generate_mask(radar_data):
 	tornados = get_tornados(stats["begin_time"] - 60, stats["end_time"] + 180)
 	scan_time = stats["begin_time"] + (stats["end_time"] - stats["begin_time"]) / 4
 	if tornados.shape[0] == 0:
-		return np.zeros((radar_data.theta_buffer_count, radar_data.radius_buffer_count))
+		return np.zeros((radar_data.theta_buffer_count, radar_data.radius_buffer_count)), []
 	mask = None
 	theta_buffer_count = radar_data.theta_buffer_count
 	radius_buffer_count = radar_data.radius_buffer_count
