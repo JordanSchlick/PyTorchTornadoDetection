@@ -1,4 +1,6 @@
-import time
+import os
+os.chdir(os.path.dirname(__file__))
+
 import math
 import multiprocessing
 from matplotlib import pyplot as plt
@@ -10,7 +12,9 @@ import model
 import dataset
 
 
+
 device_str = "cuda:0" if torch.cuda.is_available() else "cpu"
+#device_str = "cpu"
 device = torch.device(device_str)
 
 dataset_files = dataset.DirectoryTrainTest("./data/Radar/l2data", train_percentage=90)

@@ -5,6 +5,8 @@ import random
 import threading
 import time
 import math
+import gzip
+import pickle
 import multiprocessing
 import hashlib
 
@@ -138,6 +140,10 @@ class DirectoryTrainTest:
 			files.remove(".gitkeep")
 		except ValueError:
 			pass
+		try:
+			files.remove("cache")
+		except ValueError:
+			pass
 		print("found "+str(len(files))+" files")
 		files = map(self._process_file, files)
 		files = sorted(files, key=lambda d: d["hash"])
@@ -167,7 +173,7 @@ class DirectoryTrainTest:
 
 
 class TornadoDataset(ThreadedDataset):
-	def __init__(self,files,auto_shuffle=False,thread_count=4,buffer_size=5,section_size=512,log_queue_empty=False) -> None:
+	def __init__(self,files,auto_shuffle=False,thread_count=4,buffer_size=5,section_size=512,cache_results=True,log_queue_empty=False) -> None:
 		"""A dataset for finding tornados in radar data
 
 		Args:
@@ -176,11 +182,14 @@ class TornadoDataset(ThreadedDataset):
 			thread_count (int, optional): Number of threads to use. Defaults to 0.
 			buffer_size (int, optional): Number of items to be queued up. Defaults to 5.
 			section_size (int, optional): Size of outputs along theta and sweep
+			cache_results (bool, optional): If the outputs of the data set should be cached to avoid reprocessing nexrad archives
 		"""
 		self.files = files
 		self.auto_shuffle = auto_shuffle
 		self.section_size = section_size
+		self.cache_results = cache_results
 		self.location = 0
+		self.epoch = 0
 		
 		# ensure the data is loaded
 		tornado_data.get_all_tornados()
@@ -236,11 +245,28 @@ class TornadoDataset(ThreadedDataset):
 			self.location += 1
 			if self.location >= len(self.files):
 				self.location = 0
+				self.epoch += 1
 				self.buffer_lock.release()
 				if self.auto_shuffle:
 					self.shuffle()
 			else:
 				self.buffer_lock.release()
+			
+			
+			file_parts = os.path.split(file)
+			file_cache_dir = os.path.join(file_parts[0],"cache")
+			file_cache = os.path.join(file_cache_dir, file_parts[1] + ".pkl.gz")
+			if self.cache_results:
+				try:
+					if os.path.isfile(file_cache):
+						#print("unpicking")
+						with gzip.open(file_cache, 'rb') as file:
+							data = pickle.load(file)
+							#print("unpicking done")
+							continue
+				except:
+					#print("unpicking failed")
+					pass
 			
 			radar_data_holder = openstorm_radar_py.RadarDataHolder()
 			
@@ -357,6 +383,21 @@ class TornadoDataset(ThreadedDataset):
 			
 			#buffer = np.stack(buffers, axis=-1)
 			data = outputs
+			
+			if self.cache_results:
+				try:
+					try:
+						#print(file_cache_dir, file_cache)
+						os.mkdir(file_cache_dir)
+					except Exception as e:
+						#print(e)
+						pass
+					# write processed data to cache
+					with gzip.open(file_cache + ".tmp", 'wb', compresslevel=4) as file:
+						pickle.dump(data, file, protocol=pickle.HIGHEST_PROTOCOL)
+					os.rename(file_cache + ".tmp", file_cache)
+				except:
+					pass
 				
 		return data
 	
