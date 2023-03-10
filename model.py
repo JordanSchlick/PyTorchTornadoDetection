@@ -27,7 +27,7 @@ class MaskLoss(torch.nn.Module):
 	"""
 	A loss function for finding tornados.
 	The space inside the mask should have a high value somewhere, while the outside should be zero.
-	The output loss is between 0 and 2.
+	The output loss is between 0 and 2.5
 	Loss values less than 0.5 indicate the model is able to differentiate between the inside and outside.
 	"""
 	def __init__(self):
