@@ -39,13 +39,24 @@ class MaskLoss(torch.nn.Module):
 		output = output.reshape(output.shape[0], -1)
 		mask = torchvision.transforms.functional.crop(mask, 8, 8, mask.shape[1] - 16, mask.shape[2] - 16)
 		mask = mask.reshape(mask.shape[0], -1)
+		
+		# calculate loss outside of mask
 		outside_mask = torch.abs(output * (1 - mask))
 		#print(output.shape, output.dtype, mask.shape, mask.dtype, outside_mask.shape, outside_mask.dtype)
 		outside_mask = torch.mean(outside_mask, dim=-1) * 0.5 + torch.max(outside_mask, dim=-1).values * 0.5
+		outside_mask_mean = torch.mean(outside_mask)
+		
+		# calculate loss for inside of mask
 		inside_mask = output * mask
 		# mean is included inside the mask to keep gradients alive
 		inside_mask = 1 - (torch.max(inside_mask, dim=-1).values * 0.9 + torch.mean(inside_mask, dim=-1) * 0.1)
-		loss = outside_mask + inside_mask * 1.5
+		inside_mask_mean = torch.mean(inside_mask)
+		
+		# punish optimizing for only one part of mask
+		imbalance = torch.abs(inside_mask_mean - outside_mask_mean)
+		imbalance = imbalance * imbalance * imbalance
+		
+		loss = outside_mask_mean + inside_mask_mean * 1.5 + imbalance * 2
 		#print(loss)
 		return torch.mean(loss), {
 			"outside_mask": outside_mask,

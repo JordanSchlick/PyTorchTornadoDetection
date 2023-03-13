@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import torch
 import torchvision.utils
+import torch.utils.tensorboard
 import torch.utils.data
 import model
 import dataset
@@ -27,9 +28,12 @@ thread_count = max(math.ceil(multiprocessing.cpu_count() / 2) - 2, 1)
 train_file_list = dataset_files.train_list
 #train_file_list = list(filter(lambda x: not (".gz" in x), train_file_list))
 tornado_dataset = dataset.TornadoDataset(train_file_list, thread_count=thread_count, buffer_size=thread_count * 2, section_size=256, auto_shuffle=True, cache_results=True)
-torch_tornado_dataset = dataset.TorchDataset(tornado_dataset)
-data_loader = torch.utils.data.DataLoader(torch_tornado_dataset, 16, pin_memory=True, pin_memory_device=device_str) #, num_workers=2, pin_memory=True, pin_memory_device=device_str
-data_iter = iter(data_loader)
+custom_data_loader = dataset.CustomTorchLoader(tornado_dataset, batch_size=16, device=device)
+tornado_dataset_test = dataset.TornadoDataset(dataset_files.test_list, thread_count=thread_count, buffer_size=thread_count * 2, section_size=256, auto_shuffle=True, cache_results=True)
+custom_data_loader_test = dataset.CustomTorchLoader(tornado_dataset_test, batch_size=16, device=device)
+# torch_tornado_dataset = dataset.TorchDataset(tornado_dataset)
+# data_loader = torch.utils.data.DataLoader(torch_tornado_dataset, 16, pin_memory=True, pin_memory_device=device_str) #, num_workers=2, pin_memory=True, pin_memory_device=device_str
+# data_iter = iter(data_loader)
 #data_iter = iter(torch_tornado_dataset)
 # item = next(data_iter)
 # item = next(data_iter)
@@ -51,34 +55,54 @@ def matplotlib_imshow(img, one_channel=False):
 # matplotlib_imshow(img_grid, one_channel=False)
 # tornado_dataset.destroy()
 
+writer = torch.utils.tensorboard.SummaryWriter('runs/tornado')
+
 tornado_detection_model = model.TornadoDetectionModel()
 
 pytorch_total_params = sum(p.numel() for p in tornado_detection_model.parameters())
 print("parameter count", pytorch_total_params)
 
 tornado_detection_model.to(device)
-#optimizer = torch.optim.SGD(tornado_detection_model.parameters(), lr=0.01, momentum=0.9)
+#optimizer = torch.optim.SGD(tornado_detection_model.parameters(), lr=0.001, momentum=0.9)
 optimizer = torch.optim.AdamW(tornado_detection_model.parameters(),lr=0.0001)
+#optimizer = torch.optim.Adadelta(tornado_detection_model.parameters(),lr=1.0)
 
 loss_function = model.MaskLoss()
 loss_function.to(device)
 
-for step in range(10):
-	#item = next(data_iter)
+# for step in range(10):
+# 	#item = next(data_iter)
 	
-	print("got item", tornado_dataset.next()["file"])
+# 	print("got item", tornado_dataset.next()["file"])
 #print("sleeping=================")
 #time.sleep(1000000)
 
+# log model to tensorboard
+item = custom_data_loader.next()
+class TraceModel(torch.nn.Module):
+	def __init__(self):
+		super().__init__()
+		self.tornado_detection_model = model.TornadoDetectionModel()
+		self.loss_function = model.MaskLoss()
+	def forward(self, input_data, mask):
+		output = self.tornado_detection_model(input_data)
+		loss, extra_loss_info = self.loss_function(output, mask)
+		return loss
+trace_model = TraceModel().to("cpu")
+writer.add_graph(trace_model, (item["data"].to("cpu"), item["mask"].to("cpu")))
+del trace_model
+writer.flush()
 
-for step in range(10000):
+torch.cuda.empty_cache()
+for step in range(1000000):
 	print("get next =====================")
-	item = next(data_iter)
+	# item = next(data_iter)
+	item = custom_data_loader.next()
 	print("got next =====================")
 	input_data = item["data"]
-	input_data = input_data.to(device, non_blocking=True)
+	# input_data = input_data.to(device, non_blocking=True)
 	mask = item["mask"]
-	mask = mask.to(device, non_blocking=True)
+	# mask = mask.to(device, non_blocking=True)
 	
 	print(input_data.shape)
 	optimizer.zero_grad()
@@ -94,17 +118,47 @@ for step in range(10000):
 	mean_out = torch.mean(output)
 	min_out = torch.min(output)
 	max_out = torch.max(output)
-	print("step", step, "loss", loss.item(), "mean", mean_out.detach().cpu().numpy(), "min", min_out.detach().cpu().numpy(), "max", max_out.detach().cpu().numpy())
-	print("outside_mask", extra_loss_info["outside_mask"].detach().cpu().numpy())
-	print("inside_mask", extra_loss_info["inside_mask"].detach().cpu().numpy())
-	images = torch.stack([
-		mask,
-		output,
-		input_data[:,0,0,:,:],
-	], 1)
-	images = torch.nn.functional.max_pool2d(images, 4)
-	img_grid = torchvision.utils.make_grid(images, nrow=4)
-	#matplotlib_imshow(img_grid, one_channel=False)
+	loss_value = loss.item()
+	outside_mask = extra_loss_info["outside_mask"].detach().cpu().numpy()
+	inside_mask = extra_loss_info["inside_mask"].detach().cpu().numpy()
+	print("step", step, "loss", loss_value, "mean", mean_out.detach().cpu().numpy(), "min", min_out.detach().cpu().numpy(), "max", max_out.detach().cpu().numpy())
+	print("outside_mask", outside_mask)
+	print("inside_mask", inside_mask)
+	writer.add_scalars('TrainingLoss', { 'Training' : loss_value,}, step)
+	if step % 10 == 0:
+		
+		
+		item_test = custom_data_loader_test.next()
+		input_data_test = item_test["data"]
+		mask_test = item_test["mask"]
+		output_test = tornado_detection_model(input_data_test)
+		loss_test, extra_loss_test_info = loss_function(output_test, mask_test)
+		
+		writer.add_scalars('Training vs. Testing Loss', { 'Training' : loss_value, 'Testing' : loss_test.item() }, step)
+		
+		if step % 50 == 0:
+			images = torch.stack([
+				mask[:16],
+				output[:16],
+				input_data[:16,0,0,:,:],
+			], 1)
+			#images = torch.nn.functional.max_pool2d(images, 4)
+			img_grid = torchvision.utils.make_grid(images, nrow=4)
+			writer.add_image('Training output', img_grid, step)
+			#matplotlib_imshow(img_grid, one_channel=False)
+			
+			images = torch.stack([
+				mask_test[:16],
+				output_test[:16],
+				input_data_test[:16,0,0,:,:],
+			], 1)
+			#images = torch.nn.functional.max_pool2d(images, 4)
+			img_grid = torchvision.utils.make_grid(images, nrow=4)
+			writer.add_image('Testing output', img_grid, step)
+		if step % 100 == 0:
+			torch.cuda.empty_cache()
+	writer.flush()
+		
 	tornado_detection_model.train(True)
 	
 torch.cuda.empty_cache()

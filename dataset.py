@@ -137,30 +137,28 @@ class DirectoryTrainTest:
 		"""
 		self.folder = folder
 		files = glob.glob(folder + '/*', recursive = True)
-		try:
-			files.remove(".gitkeep")
-		except ValueError:
-			pass
-		try:
-			files.remove("cache")
-		except ValueError:
-			pass
+		#print(files)
 		print("found "+str(len(files))+" files")
 		files = map(self._process_file, files)
+		files = filter(lambda x: x["name"] != ".gitkeep" and x["name"] != "cache", files)
 		files = sorted(files, key=lambda d: d["hash"])
+		#print(files)
 		split_location = round(len(files) * train_percentage / 100)
 		
 		self.train_info = files[0:split_location]
 		self.test_info = files[split_location:]
-		self.train_list = list(map(lambda x: x["name"], self.train_info))
-		self.test_list = list(map(lambda x: x["name"], self.test_info))
+		self.train_list = list(map(lambda x: x["path"], self.train_info))
+		self.test_list = list(map(lambda x: x["path"], self.test_info))
 	
 	def _process_file(self, filename):
 		m = hashlib.sha256()
 		m.update(filename.encode())
+		name = os.path.split(filename)[1]
+		if name == "cache":
+			print(filename)
 		return {
-			"name": filename, 
-			"path": self.folder + "/" + filename,
+			"name": name, 
+			"path": filename,
 			"hash": m.hexdigest()
 		}
 
@@ -427,8 +425,30 @@ class TornadoDataset(ThreadedDataset):
 		self.buffer_lock.release()
 
 
-
-
+class CustomTorchLoader(ThreadedDataset):
+	def __init__(self, input_dataset, batch_size=16, device=torch.device("cpu"), thread_count=1, buffer_size=1, log_queue_empty=False):
+		self.input_dataset = input_dataset
+		self.batch_size = batch_size
+		self.device = device
+		super().__init__(thread_count=thread_count,buffer_size=buffer_size,log_queue_empty=log_queue_empty,debug_name="TornadoDataset")
+	
+	def _generator(self):
+		in_items = {}
+		for i in range(self.batch_size):
+			in_item = self.input_dataset.next()
+			for key in in_item:
+				if key not in in_items:
+					in_items[key] = []
+				in_items[key].append(in_item[key])
+		out_item = {}
+		for key in in_items:
+			value = in_items[key]
+			#if isinstance(in_item[key], str):
+			if isinstance(value[0], np.ndarray):
+				out_item[key] = torch.from_numpy(np.stack(value)).to(self.device, non_blocking=True)
+			else:
+				out_item[key] = value
+		return out_item
 
 
 class TorchDataset(torch.utils.data.IterableDataset):
