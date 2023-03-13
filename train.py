@@ -1,7 +1,10 @@
 import os
-os.chdir(os.path.dirname(__file__))
+file_directory=os.path.dirname(__file__)
+if file_directory:
+    os.chdir(file_directory)
 
 import math
+import time
 import multiprocessing
 from matplotlib import pyplot as plt
 import numpy as np
@@ -20,9 +23,12 @@ device = torch.device(device_str)
 dataset_files = dataset.DirectoryTrainTest("./data/Radar/l2data", train_percentage=90)
 print("Data split", len(dataset_files.train_list), len(dataset_files.test_list))
 thread_count = max(math.ceil(multiprocessing.cpu_count() / 2) - 2, 1)
-tornado_dataset = dataset.TornadoDataset(dataset_files.test_list, thread_count=thread_count, buffer_size=thread_count * 2, section_size=256, auto_shuffle=True)
+#thread_count = 4
+train_file_list = dataset_files.train_list
+#train_file_list = list(filter(lambda x: not (".gz" in x), train_file_list))
+tornado_dataset = dataset.TornadoDataset(train_file_list, thread_count=thread_count, buffer_size=thread_count * 2, section_size=256, auto_shuffle=True, cache_results=True)
 torch_tornado_dataset = dataset.TorchDataset(tornado_dataset)
-data_loader = torch.utils.data.DataLoader(torch_tornado_dataset, 16) #, num_workers=2, pin_memory=True, pin_memory_device=device_str
+data_loader = torch.utils.data.DataLoader(torch_tornado_dataset, 16, pin_memory=True, pin_memory_device=device_str) #, num_workers=2, pin_memory=True, pin_memory_device=device_str
 data_iter = iter(data_loader)
 #data_iter = iter(torch_tornado_dataset)
 # item = next(data_iter)
@@ -57,15 +63,22 @@ optimizer = torch.optim.AdamW(tornado_detection_model.parameters(),lr=0.0001)
 loss_function = model.MaskLoss()
 loss_function.to(device)
 
+for step in range(10):
+	#item = next(data_iter)
+	
+	print("got item", tornado_dataset.next()["file"])
+#print("sleeping=================")
+#time.sleep(1000000)
 
 
-
-for step in range(1000):
+for step in range(10000):
+	print("get next =====================")
 	item = next(data_iter)
+	print("got next =====================")
 	input_data = item["data"]
-	input_data = input_data.to(device)
+	input_data = input_data.to(device, non_blocking=True)
 	mask = item["mask"]
-	mask = mask.to(device)
+	mask = mask.to(device, non_blocking=True)
 	
 	print(input_data.shape)
 	optimizer.zero_grad()

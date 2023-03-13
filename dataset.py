@@ -9,6 +9,7 @@ import gzip
 import pickle
 import multiprocessing
 import hashlib
+import traceback
 
 import numpy as np
 # import tensorflow as tf
@@ -168,7 +169,9 @@ class DirectoryTrainTest:
 
 
 
-
+class DummyDebugClass:
+	"""Class to use to use to detect memory leaks"""
+	pass
 
 
 
@@ -268,6 +271,9 @@ class TornadoDataset(ThreadedDataset):
 					#print("unpicking failed")
 					pass
 			
+			#print("start load")
+			
+
 			radar_data_holder = openstorm_radar_py.RadarDataHolder()
 			
 			# select products to load
@@ -281,6 +287,7 @@ class TornadoDataset(ThreadedDataset):
 			radar_data_holder.load(file)
 			while(radar_data_holder.get_state() == openstorm_radar_py.RadarDataHolder.DataStateLoading):
 				#print("loading...", end='\r')
+				#print("loading...",random.randint(0,10000))
 				time.sleep(0.1)
 			#print("loaded", "      ", end='\n')
 			
@@ -330,17 +337,19 @@ class TornadoDataset(ThreadedDataset):
 			mask, tornados = tornado_data.generate_mask(reflectivity_data)
 			
 			# allow data to be freed quicker
-			reflectivity_data = None
-			velocity_data = None
-			spectrum_width_data = None
-			corelation_coefficient_data = None
-			differential_reflectivity_data = None
-			reflectivity_product = None
-			velocity_product = None
-			spectrum_width_product = None
-			corelation_coefficient_product = None
-			differential_reflectivity_product = None
-			radar_data_holder = None
+			del reflectivity_data
+			del velocity_data
+			del spectrum_width_data
+			del corelation_coefficient_data
+			del differential_reflectivity_data
+			del reflectivity_product
+			del velocity_product
+			del spectrum_width_product
+			del corelation_coefficient_product
+			del differential_reflectivity_product
+			del radar_data_holder
+			
+			#print("free")
 			
 			outputs = []
 			
@@ -374,12 +383,17 @@ class TornadoDataset(ThreadedDataset):
 				sliced_buffers[3] = np.maximum(sliced_buffers[3], 0) # corelation coefficient
 				sliced_buffers[4] = np.where(sliced_buffers[4] != -np.inf, sliced_buffers[4], 0) / 8 # differential_reflectivity
 				
+				#print("add tornado", len(self.buffer) >= self.buffer_size, tornado, len(tornados))
+				#traceback.print_stack()
+				
 				outputs.append({
 					"data": np.stack(sliced_buffers, axis=0),
 					"mask": sliced_mask.astype(np.float32),
 					"file": file,
-					"bounds": (theta_start, theta_end, radius_start, radius_end)
+					"bounds": (theta_start, theta_end, radius_start, radius_end),
+					#"DummyDebugClass": DummyDebugClass()
 				})
+				#print("added tornado")
 			
 			#buffer = np.stack(buffers, axis=-1)
 			data = outputs
@@ -398,7 +412,7 @@ class TornadoDataset(ThreadedDataset):
 					os.rename(file_cache + ".tmp", file_cache)
 				except:
 					pass
-				
+		#print("generated")
 		return data
 	
 	

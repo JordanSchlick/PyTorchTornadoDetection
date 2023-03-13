@@ -3,11 +3,13 @@ import pytz
 import glob
 import dateutil
 import re
+import os
 import time
+import threading
 import numpy as np
 
 tornado_dataframe = None
-
+tornado_dataframe_lock = threading.Lock()
 
 # print(pandas.to_datetime(dateutil.parser.parse("1970-01-01 00:00:00 -6"), utc=True))
 # print(pandas.to_datetime(dateutil.parser.parse("1970-01-01 00:00:00 UTC-6"), utc=True))
@@ -20,6 +22,7 @@ def load_data():
 	"""
 	Loads and cleans data about tornados
 	"""
+	tornado_dataframe_lock.acquire()
 	global tornado_dataframe
 	try:
 		cache = pandas.read_csv("./cache_data_tornados.csv")
@@ -30,6 +33,7 @@ def load_data():
 		tornado_dataframe.sort_index(inplace=True)
 		#tornado_dataframe.info()
 		print("Finished loading",tornado_dataframe.shape[0],"entries from cache_data_tornados.csv")
+		tornado_dataframe_lock.release()
 		return
 	except:
 		pass
@@ -97,6 +101,7 @@ def load_data():
 		tornado_dataframe.to_csv("./cache_data_tornados.csv")
 	except:
 		pass
+	tornado_dataframe_lock.release()
 
 def overlaps(a1, a2, b1, b2):
 	"""
@@ -127,11 +132,13 @@ def get_tornados(start_time, end_time):
 	global tornado_dataframe
 	if tornado_dataframe is None:
 		load_data()
+	#tornado_dataframe_lock.acquire()
 	# Get tornados with dates close to the times
 	df = tornado_dataframe.loc[start_time-24*60*60:end_time+24*60*60]
 	# filter remaining elements to be in range
 	df = df[df.apply(lambda x: overlaps(x.BEGIN_TIME_UNIX, x.END_TIME_UNIX, start_time, end_time) >= 0, axis=1)]
-	
+	df = list(df.iterrows())
+	#tornado_dataframe_lock.release()
 	return df
 
 def get_all_tornados():
@@ -169,15 +176,21 @@ def generate_mask(radar_data):
 	stats = radar_data.get_stats()
 	# expand time range slightly to get tornados that ate about to happen
 	tornados = get_tornados(stats["begin_time"] - 60, stats["end_time"] + 180)
+	if len(tornados) > 50:
+		print(stats)
+		print("to many tornados", len(tornados))
+		return []
+		#os._exit(1)
+		#print(tornados)
 	scan_time = stats["begin_time"] + (stats["end_time"] - stats["begin_time"]) / 4
-	if tornados.shape[0] == 0:
+	if len(tornados) == 0:
 		return np.zeros((radar_data.theta_buffer_count, radar_data.radius_buffer_count)), []
 	mask = None
 	theta_buffer_count = radar_data.theta_buffer_count
 	radius_buffer_count = radar_data.radius_buffer_count
 	X, Y = np.ogrid[:theta_buffer_count, :radius_buffer_count]
 	info = []
-	for index, tornado in tornados.iterrows():
+	for index, tornado in tornados:
 		# time in tornados lifespan 0.0 to 1.0
 		# can be outside that range if before or after tornado
 		tornado_time = (scan_time - tornado.BEGIN_TIME_UNIX) / max((tornado.END_TIME_UNIX - tornado.BEGIN_TIME_UNIX), 30)
