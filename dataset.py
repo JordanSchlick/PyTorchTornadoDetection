@@ -291,22 +291,37 @@ class TornadoDataset(ThreadedDataset):
 			
 			# check that all products are loaded
 			is_fully_loaded = reflectivity_product.is_loaded() and velocity_product.is_loaded() and spectrum_width_product.is_loaded() and corelation_coefficient_product.is_loaded() and differential_reflectivity_product.is_loaded()
+			error_text = None
 			if not is_fully_loaded:
-				print("could not load all products from", file)
-				continue
+				error_text = "could not load all products from"
 			
-			# get data for each product
-			reflectivity_data = reflectivity_product.get_radar_data()
-			velocity_data = velocity_product.get_radar_data()
-			spectrum_width_data = spectrum_width_product.get_radar_data()
-			corelation_coefficient_data = corelation_coefficient_product.get_radar_data()
-			differential_reflectivity_data = differential_reflectivity_product.get_radar_data()
+			if error_text is None:
+				# get data for each product
+				reflectivity_data = reflectivity_product.get_radar_data()
+				velocity_data = velocity_product.get_radar_data()
+				spectrum_width_data = spectrum_width_product.get_radar_data()
+				corelation_coefficient_data = corelation_coefficient_product.get_radar_data()
+				differential_reflectivity_data = differential_reflectivity_product.get_radar_data()
+				
+				if not self._validate_radar_data(reflectivity_data):
+					error_text = "missing data in reflectivity volume"
+				if not self._validate_radar_data(velocity_data):
+					error_text = "missing data in velocity volume"
 			
-			if not self._validate_radar_data(reflectivity_data):
-				print("missing data in reflectivity volume", file)
-				continue
-			if not self._validate_radar_data(velocity_data):
-				print("missing data in velocity volume", file)
+			if error_text is not None:
+				print(error_text, file)
+				if self.cache_results:
+					try:
+						try:
+							os.mkdir(file_cache_dir)
+						except Exception as e:
+							pass
+						# write None to cache
+						with gzip.open(file_cache + ".tmp", 'wb', compresslevel=4) as file:
+							pickle.dump(None, file, protocol=pickle.HIGHEST_PROTOCOL)
+						os.rename(file_cache + ".tmp", file_cache)
+					except:
+						pass
 				continue
 			
 			theta_start = 0

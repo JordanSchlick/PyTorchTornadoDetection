@@ -62,6 +62,16 @@ tornado_detection_model = model.TornadoDetectionModel()
 pytorch_total_params = sum(p.numel() for p in tornado_detection_model.parameters())
 print("parameter count", pytorch_total_params)
 
+if True:
+	# distribute across gpus
+	# if device_str == "cpu" or os.name == 'nt':
+	# 	torch.distributed.init_process_group(backend='gloo')
+	# else:
+	# 	torch.distributed.init_process_group(backend='nccl')
+	# tornado_detection_model = torch.nn.parallel.DistributedDataParallel(tornado_detection_model)
+	tornado_detection_model = torch.nn.DataParallel(tornado_detection_model)
+	
+
 tornado_detection_model.to(device)
 #optimizer = torch.optim.SGD(tornado_detection_model.parameters(), lr=0.001, momentum=0.9)
 optimizer = torch.optim.AdamW(tornado_detection_model.parameters(),lr=0.0001)
@@ -107,9 +117,10 @@ for step in range(1000000):
 	print(input_data.shape)
 	optimizer.zero_grad()
 	
-	output = tornado_detection_model(input_data)
-	#loss = torch.mean(torch.maximum(1 - output, torch.tensor(0)))
-	loss, extra_loss_info = loss_function(output, mask)
+	with torch.cuda.amp.autocast():
+		output = tornado_detection_model(input_data)
+		#loss = torch.mean(torch.maximum(1 - output, torch.tensor(0)))
+		loss, extra_loss_info = loss_function(output, mask)
 	
 	loss.backward()
 	optimizer.step()
@@ -138,20 +149,36 @@ for step in range(1000000):
 		
 		if step % 50 == 0:
 			images = torch.stack([
-				mask[:16],
-				output[:16],
-				input_data[:16,0,0,:,:],
+				mask.cpu()[:16],
+				output.cpu()[:16],
+				input_data.cpu()[:16,0,0,:,:],
 			], 1)
+			images.clamp_(0, 1)
 			#images = torch.nn.functional.max_pool2d(images, 4)
 			img_grid = torchvision.utils.make_grid(images, nrow=4)
 			writer.add_image('Training output', img_grid, step)
 			#matplotlib_imshow(img_grid, one_channel=False)
 			
+			# output one image per channel to find bad input processing
+			# for i in range(5):
+			# 	for l in range(8):
+			# 		for j in [1, -1]:
+			# 			images = torch.stack([
+			# 				mask.cpu()[:16],
+			# 				output.cpu()[:16],
+			# 				input_data.cpu()[:16,i,l,:,:] * j * 0.5,
+			# 			], 1)
+			# 			images.clamp_(0, 1)
+			# 			#images = torch.nn.functional.max_pool2d(images, 4)
+			# 			img_grid = torchvision.utils.make_grid(images, nrow=4)
+			# 			writer.add_image('Training output ' + ("-" if j < 0 else "") + " " + str(i) + " layer " + str(l), img_grid, step)
+			
 			images = torch.stack([
-				mask_test[:16],
-				output_test[:16],
-				input_data_test[:16,0,0,:,:],
+				mask_test.cpu()[:16],
+				output_test.cpu()[:16],
+				input_data_test.cpu()[:16,0,0,:,:],
 			], 1)
+			images.clamp_(0, 1)
 			#images = torch.nn.functional.max_pool2d(images, 4)
 			img_grid = torchvision.utils.make_grid(images, nrow=4)
 			writer.add_image('Testing output', img_grid, step)
