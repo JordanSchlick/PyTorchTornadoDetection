@@ -38,9 +38,8 @@ class MaskLoss(torch.nn.Module):
 
 	def forward(self, output, mask):
 		# pool mask if output is smaller
-		size_reduction = mask.shape[1] / output.shape[1]
-		if size_reduction > 1:
-			mask = torch.max_pool2d(mask, size_reduction)
+		size_reduction = int(mask.shape[1] / output.shape[1])
+		mask = torch.max_pool2d(mask, size_reduction)
 		
 		# crop edges that have problems due to padding
 		crop_pixels = min(round(8/size_reduction), 2)
