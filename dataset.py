@@ -174,7 +174,7 @@ class DummyDebugClass:
 
 
 class TornadoDataset(ThreadedDataset):
-	def __init__(self,files,auto_shuffle=False,thread_count=4,buffer_size=5,section_size=512,cache_results=True,log_queue_empty=False) -> None:
+	def __init__(self,files,auto_shuffle=False,thread_count=4,buffer_size=5,section_size=512,cache_results=True,ignore_cache=False,log_queue_empty=False) -> None:
 		"""A dataset for finding tornados in radar data
 
 		Args:
@@ -184,11 +184,14 @@ class TornadoDataset(ThreadedDataset):
 			buffer_size (int, optional): Number of items to be queued up. Defaults to 5.
 			section_size (int, optional): Size of outputs along theta and sweep
 			cache_results (bool, optional): If the outputs of the data set should be cached to avoid reprocessing nexrad archives
+			ignore_cache (bool, optional): If the existing cache should be ignored, items will still be written according to cache_results
+			
 		"""
 		self.files = files
 		self.auto_shuffle = auto_shuffle
 		self.section_size = section_size
 		self.cache_results = cache_results
+		self.ignore_cache = ignore_cache
 		self.location = 0
 		self.epoch = 0
 		
@@ -243,6 +246,7 @@ class TornadoDataset(ThreadedDataset):
 		while data is None:
 			self.buffer_lock.acquire()
 			file = self.files[self.location]
+			current_location = self.location
 			self.location += 1
 			if self.location >= len(self.files):
 				self.location = 0
@@ -257,7 +261,7 @@ class TornadoDataset(ThreadedDataset):
 			file_parts = os.path.split(file)
 			file_cache_dir = os.path.join(file_parts[0],"cache")
 			file_cache = os.path.join(file_cache_dir, file_parts[1] + ".pkl.gz")
-			if self.cache_results:
+			if self.cache_results and not self.ignore_cache:
 				try:
 					if os.path.isfile(file_cache):
 						#print("unpicking")
@@ -403,7 +407,33 @@ class TornadoDataset(ThreadedDataset):
 					"data": np.stack(sliced_buffers, axis=0),
 					"mask": sliced_mask.astype(np.float32),
 					"file": file,
+					"location_in_dataset": current_location,
 					"bounds": (theta_start, theta_end, radius_start, radius_end),
+					"tornado_info": {
+						"radar_file": os.path.split(file)[1],
+						"state": tornado["original"].STATE,
+						"radar_distance": tornado["radar_distance"],
+						"ef_scale": str(tornado["original"].TOR_F_SCALE)[2],
+						"tornado_time": tornado["tornado_time"],
+						"tornado_length": tornado["original"].TOR_LENGTH,
+						"tornado_width": tornado["original"].TOR_WIDTH,
+						"injuries_direct": tornado["original"].INJURIES_DIRECT,
+						"injuries_indirect": tornado["original"].INJURIES_INDIRECT,
+						"deaths_direct": tornado["original"].DEATHS_DIRECT,
+						"deaths_indirect": tornado["original"].DEATHS_INDIRECT,
+						"damage_property": tornado["original"].DAMAGE_PROPERTY,
+						"damage_crops": tornado["original"].DAMAGE_CROPS,
+						"month": tornado["original"].MONTH_NAME,
+						"begin_time": tornado["original"].BEGIN_TIME_UNIX,
+						"end_time": tornado["original"].END_TIME_UNIX,
+						"duration": tornado["original"].DURATION,
+						"latitude": tornado["original"].BEGIN_LAT,
+						"longitude": tornado["original"].BEGIN_LON,
+						"source": tornado["original"].SOURCE,
+						"pixel_bounds": (theta_start, theta_end, radius_start, radius_end),
+						"pixel_location": (tornado["location_theta"], tornado["location_radius"]),
+						"narrative": tornado["original"].EVENT_NARRATIVE,
+					}
 					#"DummyDebugClass": DummyDebugClass()
 				})
 				#print("added tornado")

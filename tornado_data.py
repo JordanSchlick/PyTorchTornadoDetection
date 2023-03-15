@@ -5,6 +5,7 @@ import dateutil
 import re
 import os
 import time
+import math
 import threading
 import numpy as np
 
@@ -224,6 +225,9 @@ def generate_mask(radar_data):
 			"tornado_time": tornado_time,
 			"location_theta": pixel_location_theta,
 			"location_radius": pixel_location_radius,
+			"radar_distance": math.sqrt(pos[0]**2 + pos[1]**2 + pos[2]**2),
+			"position": pos,
+			"original": tornado,
 		})
 	return mask, info
 
