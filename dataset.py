@@ -174,7 +174,7 @@ class DummyDebugClass:
 
 
 class TornadoDataset(ThreadedDataset):
-	def __init__(self,files,auto_shuffle=False,thread_count=4,buffer_size=5,section_size=512,cache_results=True,ignore_cache=False,log_queue_empty=False) -> None:
+	def __init__(self,files,auto_shuffle=False,thread_count=4,buffer_size=5,section_size=256,cache_results=True,ignore_cache=False,log_queue_empty=False) -> None:
 		"""A dataset for finding tornados in radar data
 
 		Args:
@@ -267,10 +267,13 @@ class TornadoDataset(ThreadedDataset):
 						#print("unpicking")
 						with gzip.open(file_cache, 'rb') as file:
 							data = pickle.load(file)
+							if data is not None:
+								for item in data:
+									item["location_in_dataset"] = current_location
 							#print("unpicking done")
 							continue
-				except:
-					#print("unpicking failed")
+				except Exception as e:
+					#print("unpicking failed", e)
 					pass
 			
 			#print("start load")
