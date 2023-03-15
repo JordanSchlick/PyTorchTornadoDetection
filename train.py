@@ -103,8 +103,22 @@ writer.add_graph(trace_model, (item["data"].to("cpu"), item["mask"].to("cpu")))
 del trace_model
 writer.flush()
 
+step = -1
+
+
+# load model
+if os.path.isfile("saved_model.pt"):
+	saved_data = torch.load("saved_model.pt")
+	tornado_detection_model.load_state_dict(saved_data["state_dict_model"])
+	optimizer.load_state_dict(saved_data["state_dict_optimizer"])
+	step = saved_data["step"]
+	del saved_data
+	print("loaded model from step", step)
+
+
 torch.cuda.empty_cache()
-for step in range(1000000):
+for i in range(1000000):
+	step += 1
 	print("get next =====================")
 	# item = next(data_iter)
 	item = custom_data_loader.next()
@@ -182,6 +196,16 @@ for step in range(1000000):
 			#images = torch.nn.functional.max_pool2d(images, 4)
 			img_grid = torchvision.utils.make_grid(images, nrow=4)
 			writer.add_image('Testing output', img_grid, step)
+		if step % 500 == 0 and step != 0:
+			print("saving model at step", step)
+			saved_data = {
+				"state_dict_model": tornado_detection_model.state_dict(),
+				"state_dict_optimizer": optimizer.state_dict(),
+				"step": step
+			}
+			torch.save(saved_data, "saved_model.pt.tmp")
+			os.rename("saved_model.pt.tmp", "saved_model.pt")
+			del saved_data
 		if step % 100 == 0:
 			torch.cuda.empty_cache()
 	writer.flush()

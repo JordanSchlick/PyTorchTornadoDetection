@@ -7,3 +7,5 @@ evaluation_data.csv
 /data/Radar/temp2
 /data/Radar/s3cache
 /runs
+/runs*
+saved_model*

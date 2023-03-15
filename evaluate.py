@@ -24,7 +24,7 @@ device = torch.device(device_str)
 dataset_files = dataset.DirectoryTrainTest("./data/Radar/l2data", train_percentage=90)
 print("Data split", len(dataset_files.train_list), len(dataset_files.test_list))
 thread_count = max(math.ceil(multiprocessing.cpu_count() / 2) - 2, 1)
-tornado_dataset = dataset.TornadoDataset(dataset_files.test_list, thread_count=thread_count, buffer_size=thread_count * 2, section_size=256, auto_shuffle=True, cache_results=True)
+tornado_dataset = dataset.TornadoDataset(dataset_files.test_list, thread_count=thread_count, buffer_size=thread_count * 2, section_size=256, auto_shuffle=False, cache_results=True)
 custom_data_loader = dataset.CustomTorchLoader(tornado_dataset, batch_size=16, device=device)
 
 
@@ -48,6 +48,13 @@ tornado_detection_model.train(False)
 loss_function = model.MaskLoss()
 loss_function.to(device)
 
+
+if os.path.isfile("saved_model.pt"):
+	saved_data = torch.load("saved_model.pt")
+	tornado_detection_model.load_state_dict(saved_data["state_dict_model"])
+	step = saved_data["step"]
+	del saved_data
+	print("loaded model from step", step)
 
 tornados = []
 
