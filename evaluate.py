@@ -5,6 +5,7 @@ if file_directory:
 
 import math
 import time
+import sys
 import multiprocessing
 from matplotlib import pyplot as plt
 import numpy as np
@@ -56,38 +57,93 @@ if os.path.isfile("saved_model.pt"):
 	del saved_data
 	print("loaded model from step", step)
 
-tornados = []
+arg = ""
+try:
+	arg = sys.argv[1]
+except:
+	pass
+if arg == "csv":
+	# create a csv data containing info about the model
+	tornados = []
 
-# run through testing set and collect data
-beginning = True
-while tornado_dataset.location > 100 + thread_count * 2 or beginning:
-# for i in range(100):
-	if tornado_dataset.location > 100 + thread_count * 2:
-		beginning = False
-	batch = custom_data_loader.next()
-	print("got batch with ids ", batch["location_in_dataset"])
-	
-	input_data = batch["data"]
-	mask = batch["mask"]
-	
-	with torch.cuda.amp.autocast():
-		output = tornado_detection_model(input_data)
-		loss, extra_loss_info = loss_function(output, mask)
-	
-	loss = loss.item()
-	print("loss", loss)
-	outside_mask = extra_loss_info["outside_mask"].detach().cpu().numpy()
-	inside_mask = extra_loss_info["inside_mask"].detach().cpu().numpy()
-	for i in range(len(batch["tornado_info"])):
-		tornado_info = batch["tornado_info"][i]
-		true_positive_loss = inside_mask[i]
-		false_positive_loss = outside_mask[i]
-		tornado_info["true_positive_loss"] = true_positive_loss
-		tornado_info["false_positive_loss"] = false_positive_loss
-		narrative = tornado_info["narrative"]
-		del tornado_info["narrative"]
-		tornado_info["narrative"] = narrative
-		tornados.append(tornado_info)
-	
-df = pandas.DataFrame(tornados)
-df.to_csv("evaluation_data.csv")
+	# run through testing set and collect data
+	beginning = True
+	while tornado_dataset.location > 100 + thread_count * 2 or beginning:
+	# for i in range(100):
+		if tornado_dataset.location > 100 + thread_count * 2:
+			beginning = False
+		batch = custom_data_loader.next()
+		print("got batch with ids ", batch["location_in_dataset"])
+		
+		input_data = batch["data"]
+		mask = batch["mask"]
+		
+		with torch.cuda.amp.autocast():
+			output = tornado_detection_model(input_data)
+			loss, extra_loss_info = loss_function(output, mask)
+		
+		loss = loss.item()
+		print("loss", loss)
+		outside_mask = extra_loss_info["outside_mask"].detach().cpu().numpy()
+		inside_mask = extra_loss_info["inside_mask"].detach().cpu().numpy()
+		for i in range(len(batch["tornado_info"])):
+			tornado_info = batch["tornado_info"][i]
+			true_positive_loss = inside_mask[i]
+			false_positive_loss = outside_mask[i]
+			tornado_info["true_positive_loss"] = true_positive_loss
+			tornado_info["false_positive_loss"] = false_positive_loss
+			narrative = tornado_info["narrative"]
+			del tornado_info["narrative"]
+			tornado_info["narrative"] = narrative
+			tornados.append(tornado_info)
+		
+	df = pandas.DataFrame(tornados)
+	df.to_csv("evaluation_data.csv")
+
+elif arg == "image":
+	image = 0
+	os.makedirs("evaluation_images", exist_ok=True)
+	# display output images
+	def matplotlib_imshow(img, one_channel=False):
+		global image
+		if one_channel:
+			img = img.mean(dim=0)
+		#img = img / 2 + 0.5     # unnormalize
+		fig = plt.figure(figsize=(10,10))
+		ax = fig.add_subplot(111)
+		npimg = img.cpu().numpy()
+		if one_channel:
+			ax.imshow(npimg, cmap="Greys")
+		else:
+			ax.imshow(np.transpose(npimg, (1, 2, 0)))
+		#plt.show()
+		plt.savefig("evaluation_images/"+str(image)+".png")
+		image += 1
+	beginning = True
+	while tornado_dataset.location > 100 + thread_count * 2 or beginning:
+	# for i in range(100):
+		if tornado_dataset.location > 100 + thread_count * 2:
+			beginning = False
+		batch = custom_data_loader.next()
+		print("got batch with ids ", batch["location_in_dataset"])
+		input_data = batch["data"]
+		mask = batch["mask"]
+		
+		with torch.cuda.amp.autocast():
+			output = tornado_detection_model(input_data)
+			loss, extra_loss_info = loss_function(output, mask)
+		
+		images = torch.stack([
+			mask.cpu()[:16],
+			# torch.maximum(input_data.cpu()[:16,0,0,:,:] - 0.5, torch.tensor(0)),
+			output.cpu()[:16],
+			input_data.cpu()[:16,0,0,:,:],
+		], 1)
+		images.clamp_(0, 1)
+		#images = torch.nn.functional.max_pool2d(images, 4)
+		img_grid = torchvision.utils.make_grid(images, nrow=4)
+		#matplotlib_imshow(img_grid)
+		torchvision.utils.save_image(img_grid, "evaluation_images/"+str(image)+".png")
+		image += 1
+else:
+	print("usage python evaluate.py [csv|image]")

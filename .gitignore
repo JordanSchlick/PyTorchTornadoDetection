@@ -2,6 +2,7 @@ __pycache__
 cache_data*
 cache*
 evaluation_data.csv
+evaluation_images
 /data/Radar/l2data
 /data/Radar/temp
 /data/Radar/temp2
