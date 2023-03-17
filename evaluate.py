@@ -145,5 +145,83 @@ elif arg == "image":
 		#matplotlib_imshow(img_grid)
 		torchvision.utils.save_image(img_grid, "evaluation_images/"+str(image)+".png")
 		image += 1
+elif arg == "info":
+	items = 0
+	outside_correct = 0
+	inside_correct = 0
+	items_close = 0
+	outside_correct_close = 0
+	inside_correct_close = 0
+	items_closer = 0
+	outside_correct_closer = 0
+	inside_correct_closer = 0
+	items_range = 0
+	outside_correct_range = 0
+	inside_correct_range = 0
+	beginning = True
+	while tornado_dataset.location > 100 + thread_count * 2 or beginning:
+	# for i in range(100):
+		if tornado_dataset.location > 100 + thread_count * 2:
+			beginning = False
+		batch = custom_data_loader.next()
+		print("got batch with ids ", batch["location_in_dataset"])
+		
+		input_data = batch["data"]
+		mask = batch["mask"]
+		
+		with torch.cuda.amp.autocast():
+			output = tornado_detection_model(input_data)
+			loss, extra_loss_info = loss_function(output, mask)
+		
+		loss = loss.item()
+		print("loss", loss)
+		outside_mask = extra_loss_info["outside_mask"].detach().cpu().numpy()
+		inside_mask = extra_loss_info["inside_mask"].detach().cpu().numpy()
+		items += len(inside_mask)
+		for i in range(len(inside_mask)):
+			# values are offset due to the mean part of the loss function
+			if inside_mask[i] < 0.55:
+				inside_correct += 1
+			if outside_mask[i] < 0.45:
+				outside_correct += 1
+			tornado_info = batch["tornado_info"][i]
+			if tornado_info["radar_distance"] < 200000:
+				items_close += 1
+				if inside_mask[i] < 0.55:
+					inside_correct_close += 1
+				if outside_mask[i] < 0.45:
+					outside_correct_close += 1
+			if tornado_info["radar_distance"] < 100000:
+				items_closer += 1
+				if inside_mask[i] < 0.55:
+					inside_correct_closer += 1
+				if outside_mask[i] < 0.45:
+					outside_correct_closer += 1
+			if tornado_info["radar_distance"] < 400000:
+				items_range += 1
+				if inside_mask[i] < 0.55:
+					inside_correct_range += 1
+				if outside_mask[i] < 0.45:
+					outside_correct_range += 1
+				
+				
+	
+	print("total", items)
+	print("inside correct (true positives)", inside_correct, str(round(inside_correct / items * 100)) + "%")
+	print("outside correct (true negatives)", outside_correct, str(round(outside_correct / items * 100)) + "%")
+	
+	print("total less than 400 km", items_range)
+	print("inside correct less than 400 km (true positives)", inside_correct_range, str(round(inside_correct_range / items_range * 100)) + "%")
+	print("outside correct less than 400 km (true negatives)", outside_correct_range, str(round(outside_correct_range / items_range * 100)) + "%")
+	
+	print("total less than 200 km", items_close)
+	print("inside correct less than 200 km (true positives)", inside_correct_close, str(round(inside_correct_close / items_close * 100)) + "%")
+	print("outside correct less than 200 km (true negatives)", outside_correct_close, str(round(outside_correct_close / items_close * 100)) + "%")
+	
+	print("total less than 100 km", items_closer)
+	print("inside correct less than 100 km (true positives)", inside_correct_closer, str(round(inside_correct_closer / items_closer * 100)) + "%")
+	print("outside correct less than 100 km (true negatives)", outside_correct_closer, str(round(outside_correct_closer / items_closer * 100)) + "%")
+	
+		
 else:
 	print("usage python evaluate.py [csv|image]")

@@ -210,6 +210,10 @@ def generate_mask(radar_data):
 		radius = 15000 / pixel_info["pixel_radius_length"]
 		oval_ratio = pixel_info["pixel_theta_width"] / pixel_info["pixel_radius_length"]
 		
+		if pixel_location_radius >= radius_buffer_count:
+			# exclude tornados outside the data
+			continue
+		
 		# TODO: this does not handle wrapping correctly and cuts off the mask when it should wrap around theta
 		oval_ratio = oval_ratio**2
 		distance = oval_ratio * (X - pixel_location_theta)**2 + (Y - pixel_location_radius)**2
