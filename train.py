@@ -15,7 +15,10 @@ import torch.utils.data
 import model
 import dataset
 
-
+# The farther away the less precise the data becomes
+# Limiting it to a closer range like 200 km allows it focus on better data
+# set to None to use all data
+max_radar_distance = None
 
 device_str = "cuda:0" if torch.cuda.is_available() else "cpu"
 #device_str = "cpu"
@@ -27,10 +30,16 @@ thread_count = max(math.ceil(multiprocessing.cpu_count() / 2) - 2, 1)
 #thread_count = 4
 train_file_list = dataset_files.train_list
 #train_file_list = list(filter(lambda x: not (".gz" in x), train_file_list))
+
 tornado_dataset = dataset.TornadoDataset(train_file_list, thread_count=thread_count, buffer_size=thread_count * 2, section_size=256, auto_shuffle=True, cache_results=True)
+# filter out far away tornados that would be missing data
+tornado_dataset = dataset.TornadoDatasetFilter(tornado_dataset, max_radar_distance=max_radar_distance*1000)
 custom_data_loader = dataset.CustomTorchLoader(tornado_dataset, batch_size=16, device=device)
+
 tornado_dataset_test = dataset.TornadoDataset(dataset_files.test_list, thread_count=thread_count, buffer_size=thread_count * 2, section_size=256, auto_shuffle=True, cache_results=True)
+tornado_dataset_test = dataset.TornadoDatasetFilter(tornado_dataset_test, max_radar_distance=max_radar_distance*1000)
 custom_data_loader_test = dataset.CustomTorchLoader(tornado_dataset_test, batch_size=16, device=device)
+
 # torch_tornado_dataset = dataset.TorchDataset(tornado_dataset)
 # data_loader = torch.utils.data.DataLoader(torch_tornado_dataset, 16, pin_memory=True, pin_memory_device=device_str) #, num_workers=2, pin_memory=True, pin_memory_device=device_str
 # data_iter = iter(data_loader)
@@ -71,8 +80,8 @@ if True:
 	# tornado_detection_model = torch.nn.parallel.DistributedDataParallel(tornado_detection_model)
 	tornado_detection_model = torch.nn.DataParallel(tornado_detection_model)
 	
-
 tornado_detection_model.to(device)
+
 #optimizer = torch.optim.SGD(tornado_detection_model.parameters(), lr=0.001, momentum=0.9)
 optimizer = torch.optim.AdamW(tornado_detection_model.parameters(),lr=0.0001)
 #optimizer = torch.optim.Adadelta(tornado_detection_model.parameters(),lr=1.0)
@@ -117,6 +126,9 @@ if os.path.isfile("saved_model.pt"):
 
 
 torch.cuda.empty_cache()
+accuracy_total_count = 0
+accuracy_inside_count = 0
+accuracy_outside_count = 0
 for i in range(1000000):
 	step += 1
 	print("get next =====================")
@@ -143,6 +155,7 @@ for i in range(1000000):
 	mean_out = torch.mean(output)
 	min_out = torch.min(output)
 	max_out = torch.max(output)
+	
 	loss_value = loss.item()
 	outside_mask = extra_loss_info["outside_mask"].detach().cpu().numpy()
 	inside_mask = extra_loss_info["inside_mask"].detach().cpu().numpy()
@@ -150,9 +163,14 @@ for i in range(1000000):
 	print("outside_mask", outside_mask)
 	print("inside_mask", inside_mask)
 	writer.add_scalars('TrainingLoss', { 'Training' : loss_value,}, step)
+	for i in range(len(outside_mask)):
+		accuracy_total_count += 1
+		if inside_mask[i] < 0.55:
+			accuracy_inside_count += 1
+		if outside_mask[i] < 0.45:
+			accuracy_outside_count += 1
+		
 	if step % 10 == 0:
-		
-		
 		item_test = custom_data_loader_test.next()
 		input_data_test = item_test["data"]
 		mask_test = item_test["mask"]
@@ -160,6 +178,10 @@ for i in range(1000000):
 		loss_test, extra_loss_test_info = loss_function(output_test, mask_test)
 		
 		writer.add_scalars('Training vs. Testing Loss', { 'Training' : loss_value, 'Testing' : loss_test.item() }, step)
+		writer.add_scalars('Accuracy Training', { 'Inside mask' : accuracy_inside_count / accuracy_total_count * 100, 'Outside mask' : accuracy_outside_count / accuracy_total_count * 100 }, step)
+		accuracy_total_count = 0
+		accuracy_inside_count = 0
+		accuracy_outside_count = 0
 		
 		if step % 50 == 0:
 			images = torch.stack([

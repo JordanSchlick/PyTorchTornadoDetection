@@ -49,9 +49,9 @@ tornado_detection_model.train(False)
 loss_function = model.MaskLoss()
 loss_function.to(device)
 
-
-if os.path.isfile("saved_model.pt"):
-	saved_data = torch.load("saved_model.pt")
+model_file = "saved_model.pt"
+if os.path.isfile(model_file):
+	saved_data = torch.load(model_file)
 	tornado_detection_model.load_state_dict(saved_data["state_dict_model"])
 	step = saved_data["step"]
 	del saved_data
@@ -145,7 +145,7 @@ elif arg == "image":
 		#matplotlib_imshow(img_grid)
 		torchvision.utils.save_image(img_grid, "evaluation_images/"+str(image)+".png")
 		image += 1
-elif arg == "info":
+elif arg == "stats":
 	items = 0
 	outside_correct = 0
 	inside_correct = 0
@@ -185,6 +185,12 @@ elif arg == "info":
 			if outside_mask[i] < 0.45:
 				outside_correct += 1
 			tornado_info = batch["tornado_info"][i]
+			if tornado_info["radar_distance"] < 400000:
+				items_range += 1
+				if inside_mask[i] < 0.55:
+					inside_correct_range += 1
+				if outside_mask[i] < 0.45:
+					outside_correct_range += 1
 			if tornado_info["radar_distance"] < 200000:
 				items_close += 1
 				if inside_mask[i] < 0.55:
@@ -197,12 +203,6 @@ elif arg == "info":
 					inside_correct_closer += 1
 				if outside_mask[i] < 0.45:
 					outside_correct_closer += 1
-			if tornado_info["radar_distance"] < 400000:
-				items_range += 1
-				if inside_mask[i] < 0.55:
-					inside_correct_range += 1
-				if outside_mask[i] < 0.45:
-					outside_correct_range += 1
 				
 				
 	
@@ -224,4 +224,4 @@ elif arg == "info":
 	
 		
 else:
-	print("usage python evaluate.py [csv|image]")
+	print("usage python evaluate.py [csv|image|stats]")

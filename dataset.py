@@ -472,6 +472,28 @@ class TornadoDataset(ThreadedDataset):
 		self.location = 0
 		self.buffer_lock.release()
 
+class TornadoDatasetFilter(ThreadedDataset):
+	def __init__(self,in_dataset,max_radar_distance=None,thread_count=4,buffer_size=5,log_queue_empty=False) -> None:
+		"""A dataset for filtering down the dataset
+
+		Args:
+			in_dataset (ThreadedDataset): Dataset to filter.
+			max_radar_distance (number, optional): Filter by max distance from radar. Defaults to None.
+			thread_count (int, optional): Number of threads to use. Defaults to 0.
+			buffer_size (int, optional): Number of items to be queued up. Defaults to 5.
+		"""
+		self.in_dataset = in_dataset
+		self.max_radar_distance = max_radar_distance
+		
+		super().__init__(thread_count=thread_count,buffer_size=buffer_size,log_queue_empty=log_queue_empty,debug_name="TornadoDatasetFilter")
+	
+	def _generator(self):
+		item = self.in_dataset.next()
+		if self.max_radar_distance is not None:
+			if item["tornado_info"]["radar_distance"] > self.max_radar_distance:
+				return []
+		return [item]
+				
 
 class CustomTorchLoader(ThreadedDataset):
 	def __init__(self, input_dataset, batch_size=16, device=torch.device("cpu"), thread_count=1, buffer_size=1, log_queue_empty=False):

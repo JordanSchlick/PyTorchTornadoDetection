@@ -49,7 +49,7 @@ class MaskLoss(torch.nn.Module):
 		mask = mask.reshape(mask.shape[0], -1)
 		
 		# calculate loss outside of mask
-		outside_mask = torch.abs(output * (1 - mask))
+		outside_mask = output * (1 - mask)
 		#print(output.shape, output.dtype, mask.shape, mask.dtype, outside_mask.shape, outside_mask.dtype)
 		outside_mask = torch.max(outside_mask, dim=-1).values * 0.9 + torch.mean(outside_mask, dim=-1) * 0.1
 		outside_mask_mean = torch.mean(outside_mask)
@@ -64,7 +64,8 @@ class MaskLoss(torch.nn.Module):
 		imbalance = torch.abs(inside_mask_mean - outside_mask_mean)
 		imbalance = imbalance * imbalance * imbalance
 		
-		loss = outside_mask_mean + inside_mask_mean + imbalance
+		# slightly weight towards inside
+		loss = outside_mask_mean + inside_mask_mean * 1.1 + imbalance
 		#print(loss)
 		return loss, {
 			"outside_mask": outside_mask,
