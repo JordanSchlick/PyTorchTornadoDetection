@@ -19,9 +19,9 @@ https://docs.google.com/document/d/1tTWXdmuPwrlFkZXh0mHv61bBUVuVOfRyrEii6xSMXGw/
 ## Running
 First download and build the dependencies  
 Run download_radar_data.py to get the raw radar data. This comes out to about 113 GB and takes several hours.  
-Run train.py to start the training  
-Use tensorboard to monitor the training and stop train.py when it has finished converging  
-The model will be saved to saved_model.pt every 500 steps
+Run train.py to start the training.  
+Use tensorboard to monitor the training and stop train.py when it has finished converging.  
+The model will be saved to saved_model.pt every 500 steps.
 
 
 ## Dependencies
