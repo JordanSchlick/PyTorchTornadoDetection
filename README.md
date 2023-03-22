@@ -12,6 +12,10 @@ The loss function is custom and allows the model to pinpoint tornados in the dat
 * train.py is a script that runs the training loop
 * evaluate.py a script that contains tools for evaluating the model
 
+## More Information
+See more information thr Google Doc  
+https://docs.google.com/document/d/1tTWXdmuPwrlFkZXh0mHv61bBUVuVOfRyrEii6xSMXGw/edit#heading=h.pv5vtx8ps0k
+
 ## Running
 First download and build the dependencies  
 Run download_radar_data.py to get the raw radar data. This comes out to about 113 GB and takes several hours.  
