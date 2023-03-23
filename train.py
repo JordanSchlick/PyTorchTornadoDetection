@@ -16,7 +16,7 @@ import model
 import dataset
 
 # The farther away the less precise the data becomes
-# Limiting it to a closer range like 200 km allows it focus on better data
+# Limiting it to a closer range like 200000 m allows it focus on better data
 # set to None to use all data
 max_radar_distance = None
 
@@ -33,11 +33,11 @@ train_file_list = dataset_files.train_list
 
 tornado_dataset = dataset.TornadoDataset(train_file_list, thread_count=thread_count, buffer_size=thread_count * 2, section_size=256, auto_shuffle=True, cache_results=True)
 # filter out far away tornados that would be missing data
-tornado_dataset = dataset.TornadoDatasetFilter(tornado_dataset, max_radar_distance=max_radar_distance*1000)
+tornado_dataset = dataset.TornadoDatasetFilter(tornado_dataset, max_radar_distance=max_radar_distance)
 custom_data_loader = dataset.CustomTorchLoader(tornado_dataset, batch_size=16, device=device)
 
 tornado_dataset_test = dataset.TornadoDataset(dataset_files.test_list, thread_count=thread_count, buffer_size=thread_count * 2, section_size=256, auto_shuffle=True, cache_results=True)
-tornado_dataset_test = dataset.TornadoDatasetFilter(tornado_dataset_test, max_radar_distance=max_radar_distance*1000)
+tornado_dataset_test = dataset.TornadoDatasetFilter(tornado_dataset_test, max_radar_distance=max_radar_distance)
 custom_data_loader_test = dataset.CustomTorchLoader(tornado_dataset_test, batch_size=16, device=device)
 
 # torch_tornado_dataset = dataset.TorchDataset(tornado_dataset)
