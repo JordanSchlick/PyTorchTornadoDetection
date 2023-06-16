@@ -35,7 +35,7 @@ Folder
   └openstorm_radar_py  
 ```
 Run `git clone https://github.com/JordanSchlick/PyTorchTornadoDetection` and `git clone https://github.com/JordanSchlick/openstorm_radar_py` and `git clone https://github.com/JordanSchlick/OpenStorm` in the same directory do download them all.  
-Your system needs to be have an environment capable of build native python modules.  
+Your system needs to be have an environment capable of building native python modules.  
 Run `python setup.py build` inside openstorm_radar_py to build the module.
 
 This project depends on PyTorch, pandas, numpy, matplotlib, and boto3
