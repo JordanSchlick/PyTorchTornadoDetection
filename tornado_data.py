@@ -233,6 +233,8 @@ def generate_mask(radar_data):
 			"position": pos,
 			"original": tornado,
 		})
+	if mask is None:
+		mask = np.zeros((theta_buffer_count, radius_buffer_count))
 	return mask, info
 
 if __name__ == "__main__":

@@ -97,13 +97,12 @@ class ThreadedDataset:
 			while True:
 				self.buffer_lock.acquire()
 				current_buffer_size = len(self.buffer)
-				self.buffer_lock.release()
 				if current_buffer_size > 0:
-					self.buffer_lock.acquire()
 					buffer = self.buffer.pop(0)
 					self.buffer_lock.release()
 					return buffer
-				elif blocking:
+				self.buffer_lock.release()
+				if blocking:
 					if self.log_queue_empty:
 						print("Empty queue "+self.debug_name)
 					self.buffer_event.acquire()

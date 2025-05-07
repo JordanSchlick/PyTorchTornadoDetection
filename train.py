@@ -18,7 +18,8 @@ import dataset
 # The farther away the less precise the data becomes
 # Limiting it to a closer range like 200000 m allows it focus on better data
 # set to None to use all data
-max_radar_distance = None
+# max_radar_distance = None
+max_radar_distance = 200000
 
 device_str = "cuda:0" if torch.cuda.is_available() else "cpu"
 #device_str = "cpu"
@@ -64,6 +65,7 @@ def matplotlib_imshow(img, one_channel=False):
 # matplotlib_imshow(img_grid, one_channel=False)
 # tornado_dataset.destroy()
 
+# tensorboard --logdir=runs/tornado
 writer = torch.utils.tensorboard.SummaryWriter('runs/tornado')
 
 tornado_detection_model = model.TornadoDetectionModel()
@@ -226,6 +228,15 @@ for i in range(1000000):
 				"step": step
 			}
 			torch.save(saved_data, "saved_model.pt.tmp")
+			try:
+				os.remove("saved_model.pt.old")
+			except:
+				pass
+			try:
+				os.rename("saved_model.pt", "saved_model.pt.old")
+			except:
+				pass
+			# on windows rename can no replace a file
 			os.rename("saved_model.pt.tmp", "saved_model.pt")
 			del saved_data
 		if step % 100 == 0:

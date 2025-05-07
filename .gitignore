@@ -10,6 +10,6 @@ evaluation_images
 /runs
 /runs*
 saved_model*
-test_animation.mp4
+test_animation*
 test.html
 /tornado_data_visualizations/images

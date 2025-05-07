@@ -13,7 +13,7 @@ The loss function is custom and allows the model to pinpoint tornados in the dat
 * evaluate.py a script that contains tools for evaluating the model
 
 ## More Information
-See more information thr Google Doc  
+See more information the Google Doc  
 https://docs.google.com/document/d/1tTWXdmuPwrlFkZXh0mHv61bBUVuVOfRyrEii6xSMXGw/edit#heading=h.pv5vtx8ps0k
 
 ## Running
